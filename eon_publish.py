@@ -83,8 +83,10 @@ def verify_youtube():
     youtube = youtube_client()
     try:
         result = youtube.channels().list(part="id,snippet", mine=True).execute()
-    except Exception:
-        raise RuntimeError("No pude comprobar el canal YouTube autorizado. El token antiguo quizá no tenga el permiso de lectura de canal; no se publicará nada.") from None
+    except Exception as exc:
+        status = getattr(exc, "status_code", None) or getattr(getattr(exc, "resp", None), "status", None)
+        raise RuntimeError("YouTube no permitió comprobar el canal. Código HTTP: " +
+            str(status or "no disponible") + ". Puede faltar permiso OAuth, haber expirado el token o haberse autorizado otra cuenta.") from None
     channels = result.get("items", [])
     if len(channels) != 1 or channels[0].get("id") != EXPECTED_YT:
         names = ", ".join(c.get("snippet", {}).get("title", "desconocido") for c in channels) or "ninguno"
@@ -186,14 +188,32 @@ def main():
     selected = sorted(MANIFEST) if args.short == "todos" else [args.short]
     platforms = ["youtube", "facebook"] if args.platforms == "both" else [args.platforms]
 
-    # Primero comprobar todas las plataformas seleccionadas ANTES de subir.
-    yt = verify_youtube() if "youtube" in platforms else None
-    fb = verify_facebook() if "facebook" in platforms else None
+    # Diagnóstico separado de las tres conexiones; no subir si falla alguna seleccionada.
+    failures = []
+    yt = None
+    fb = None
+    if "youtube" in platforms:
+        try:
+            yt = verify_youtube()
+        except Exception as exc:
+            failures.append("YouTube: " + str(exc))
+    if "facebook" in platforms:
+        try:
+            fb = verify_facebook()
+        except Exception as exc:
+            failures.append("Facebook: " + str(exc))
     with tempfile.TemporaryDirectory(prefix="eon_") as temp:
         target = Path(temp) / "YouTube.txt"
-        rclone_file(MANIFEST[selected[0]]["metadata_id"], target)
-        sample = parse_metadata(target.read_text(encoding="utf-8-sig"))
-        print("DRIVE OK. Ejemplo de título: " + sample["title"], flush=True)
+        try:
+            rclone_file(MANIFEST[selected[0]]["metadata_id"], target)
+            sample = parse_metadata(target.read_text(encoding="utf-8-sig"))
+            print("DRIVE OK. Ejemplo de título: " + sample["title"], flush=True)
+        except Exception as exc:
+            failures.append("Google Drive: " + str(exc))
+        if failures:
+            for message in failures:
+                print("VERIFICACIÓN FALLIDA: " + message, flush=True)
+            raise RuntimeError("Faltan " + str(len(failures)) + " verificaciones; no se ha publicado ningún video.")
         if args.mode == "verify":
             print("VERIFICACIÓN COMPLETA: no se ha subido ningún video.", flush=True)
             return
