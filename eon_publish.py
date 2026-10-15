@@ -93,8 +93,13 @@ def verify_youtube():
             message = api_error.get("message", "Sin detalles")
         except (ValueError, TypeError, IndexError, AttributeError):
             reason, message = "desconocido", "Sin detalles"
-        raise RuntimeError("YouTube rechazó la verificación (HTTP " + str(status or "?") +
-            ", razón: " + reason + ", mensaje: " + message[:300] + "). No se publicó nada.") from None
+        # Los errores de renovación OAuth (RefreshError) no son respuestas HTTP de YouTube.
+        # Su texto permite distinguir invalid_grant de invalid_client y de permisos insuficientes.
+        detail = str(exc)
+        detail = re.sub(r"(?i)(access_token|refresh_token|client_secret|authorization)\\?[\"\']?\\?\s*[:=]\\?\s*[\"\']?[^,}\s]+", r"\\1=[OCULTO]", detail)
+        raise RuntimeError("Falló autenticación/verificación de YouTube (" + type(exc).__name__ +
+            ", HTTP " + str(status or "?") + ", razón: " + str(reason) +
+            ", mensaje: " + str(message)[:180] + ", detalle: " + detail[:350] + "). No se publicó nada.") from None
     channels = result.get("items", [])
     if len(channels) != 1 or channels[0].get("id") != EXPECTED_YT:
         names = ", ".join(c.get("snippet", {}).get("title", "desconocido") for c in channels) or "ninguno"
