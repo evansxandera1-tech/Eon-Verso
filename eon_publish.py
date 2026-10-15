@@ -20,7 +20,7 @@ MANIFEST = json.loads((HERE / "eon_shorts.json").read_text(encoding="utf-8"))
 EXPECTED_YT = "UCQI8q5L9aHk8BvznYj9hxsg"
 EXPECTED_FB_PAGE_ID = "111079017290300"
 EXPECTED_FB_PAGE_NAME = "Ojo al Piojo"
-VERSION = "1.2"
+VERSION = "1.3"
 # Identificador permanente de la cuenta TikTok enlazada a Buffer.
 BUFFER_TIKTOK_CHANNEL_ID = "6ad148b7778b240e2f1f3bf8"
 BUFFER_API_URL = "https://api.buffer.com"
@@ -238,6 +238,29 @@ def verify_tiktok():
     return BUFFER_TIKTOK_CHANNEL_ID
 
 
+def cloudinary_error_detail(response, cloud, key, secret):
+    """Mostrar el motivo de Cloudinary, sin revelar credenciales ni URLs privadas."""
+    try:
+        payload = response.json()
+        error = payload.get("error", {}) if isinstance(payload, dict) else {}
+        if isinstance(error, dict):
+            detail = error.get("message", "")
+        else:
+            detail = str(error)
+        if not detail and isinstance(payload, dict):
+            detail = payload.get("message", "")
+    except ValueError:
+        detail = "Respuesta no JSON; puede ser un fallo de autenticación."
+    if not isinstance(detail, str) or not detail.strip():
+        detail = "Cloudinary no devolvió detalles adicionales."
+    for credential in (secret, key, cloud):
+        if credential:
+            detail = re.sub(re.escape(credential), "[OCULTO]", detail, flags=re.IGNORECASE)
+    detail = re.sub(r"(?i)https?://\\S+", "[URL OCULTA]", detail)
+    detail = re.sub(r"(?i)(api[_ -]?secret|api[_ -]?key|access[_ -]?token|authorization)\\s*[:=]\\s*[^\\s,;]+", r"\\1=[OCULTO]", detail)
+    return " ".join(detail.split())[:220]
+
+
 def verify_cloudinary():
     """Comprobar credenciales de alojamiento sin subir videos."""
     cloud = require("CLOUDINARY_CLOUD_NAME")
@@ -250,7 +273,8 @@ def verify_cloudinary():
         params={"max_results": 1}, auth=(key, secret), timeout=40,
     )
     if not response.ok:
-        raise RuntimeError("No se pudo verificar Cloudinary (HTTP " + str(response.status_code) + ").")
+        detail = cloudinary_error_detail(response, cloud, key, secret)
+        raise RuntimeError("No se pudo verificar Cloudinary (HTTP " + str(response.status_code) + "): " + detail)
     print("CLOUDINARY OK: listo para recibir los MP4.", flush=True)
 
 
@@ -273,7 +297,8 @@ def cloudinary_upload(short_id, video):
             timeout=600,
         )
     if not response.ok:
-        raise RuntimeError("Cloudinary rechazó el video (HTTP " + str(response.status_code) + ").")
+        detail = cloudinary_error_detail(response, cloud, key, secret)
+        raise RuntimeError("Cloudinary rechazó el video (HTTP " + str(response.status_code) + "): " + detail)
     try:
         data = response.json()
         url = data.get("secure_url", "")
