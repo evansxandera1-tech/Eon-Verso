@@ -2,6 +2,7 @@
 """Publicador EON-Verso. Verifica la identidad ANTES de subir contenido."""
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
@@ -19,7 +20,10 @@ MANIFEST = json.loads((HERE / "eon_shorts.json").read_text(encoding="utf-8"))
 EXPECTED_YT = "UCQI8q5L9aHk8BvznYj9hxsg"
 EXPECTED_FB_PAGE_ID = "111079017290300"
 EXPECTED_FB_PAGE_NAME = "Ojo al Piojo"
-VERSION = "1.1"
+VERSION = "1.2"
+# Identificador permanente de la cuenta TikTok enlazada a Buffer.
+BUFFER_TIKTOK_CHANNEL_ID = "6ad148b7778b240e2f1f3bf8"
+BUFFER_API_URL = "https://api.buffer.com"
 GRAPH_VERSION = "v25.0"
 HEADINGS = (
     "TÍTULO PARA YOUTUBE SHORTS", "DESCRIPCIÓN", "HASHTAGS",
@@ -195,22 +199,133 @@ def facebook_upload(page_id, token, video, metadata):
         raise RuntimeError("Facebook rechazó la subida (código " + str(code) + ").")
     return data["id"]
 
+def buffer_graphql(query, variables=None):
+    """Consultar Buffer sin exponer la API Key en los registros."""
+    response = requests.post(
+        BUFFER_API_URL,
+        headers={"Authorization": "Bearer " + require("BUFFER_API_KEY"),
+                 "Content-Type": "application/json"},
+        json={"query": query, "variables": variables or {}},
+        timeout=45,
+    )
+    if not response.ok:
+        raise RuntimeError("Buffer rechazó la solicitud (HTTP " + str(response.status_code) + ").")
+    try:
+        data = response.json()
+    except ValueError:
+        raise RuntimeError("Buffer devolvió una respuesta no válida.") from None
+    if data.get("errors"):
+        message = data["errors"][0].get("message", "Error desconocido")
+        raise RuntimeError("Buffer: " + str(message)[:180])
+    return data.get("data") or {}
+
+
+def verify_tiktok():
+    """Comprobar que el canal enlazado es TikTok y sigue activo."""
+    query = """query EonChannel($channel: ChannelInput!) {
+      channel(input: $channel) {
+        id name service isDisconnected isLocked isQueuePaused
+      }
+    }"""
+    channel = buffer_graphql(query, {"channel": {"id": BUFFER_TIKTOK_CHANNEL_ID}}).get("channel")
+    if not channel or channel.get("id") != BUFFER_TIKTOK_CHANNEL_ID:
+        raise RuntimeError("No se encontró la cuenta TikTok autorizada en Buffer.")
+    if str(channel.get("service", "")).lower() != "tiktok":
+        raise RuntimeError("El canal de Buffer seleccionado NO corresponde a TikTok.")
+    if channel.get("isDisconnected") or channel.get("isLocked") or channel.get("isQueuePaused"):
+        raise RuntimeError("TikTok está desconectado, bloqueado o la cola está pausada en Buffer.")
+    print("TIKTOK OK (Buffer): " + str(channel.get("name", "Cuenta verificada")), flush=True)
+    return BUFFER_TIKTOK_CHANNEL_ID
+
+
+def verify_cloudinary():
+    """Comprobar credenciales de alojamiento sin subir videos."""
+    cloud = require("CLOUDINARY_CLOUD_NAME")
+    key = require("CLOUDINARY_API_KEY")
+    secret = require("CLOUDINARY_API_SECRET")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", cloud):
+        raise RuntimeError("CLOUDINARY_CLOUD_NAME no es válido.")
+    response = requests.get(
+        f"https://api.cloudinary.com/v1_1/{cloud}/resources/video",
+        params={"max_results": 1}, auth=(key, secret), timeout=40,
+    )
+    if not response.ok:
+        raise RuntimeError("No se pudo verificar Cloudinary (HTTP " + str(response.status_code) + ").")
+    print("CLOUDINARY OK: listo para recibir los MP4.", flush=True)
+
+
+def cloudinary_upload(short_id, video):
+    """Alojar el archivo hasta que Buffer complete la publicación."""
+    if video.stat().st_size > 100_000_000:
+        raise RuntimeError("El MP4 supera el máximo de 100 MB de Cloudinary Free.")
+    cloud = require("CLOUDINARY_CLOUD_NAME")
+    key = require("CLOUDINARY_API_KEY")
+    secret = require("CLOUDINARY_API_SECRET")
+    digest = hashlib.sha256(video.read_bytes()).hexdigest()[:14]
+    with video.open("rb") as handle:
+        response = requests.post(
+            f"https://api.cloudinary.com/v1_1/{cloud}/video/upload",
+            auth=(key, secret),
+            data={"folder": "eon_verso_buffer",
+                  "public_id": short_id + "_" + digest,
+                  "overwrite": "true"},
+            files={"file": (video.name, handle, "video/mp4")},
+            timeout=600,
+        )
+    if not response.ok:
+        raise RuntimeError("Cloudinary rechazó el video (HTTP " + str(response.status_code) + ").")
+    try:
+        data = response.json()
+        url = data.get("secure_url", "")
+    except ValueError:
+        url = ""
+    if not url.startswith("https://"):
+        raise RuntimeError("Cloudinary no devolvió una dirección HTTPS válida.")
+    return url
+
+
+def tiktok_queue(channel_id, video_url, metadata):
+    """Programar en Buffer (no declarar que TikTok ya publicó)."""
+    caption = (metadata["title"] + "\n\n" + metadata["facebook_description"]).strip()[:2100]
+    mutation = """mutation EonShort($input: CreatePostInput!) {
+      createPost(input: $input) {
+        ... on PostActionSuccess { post { id dueAt } }
+        ... on MutationError { message }
+      }
+    }"""
+    payload = {
+        "channelId": channel_id,
+        "text": caption,
+        "schedulingType": "automatic",
+        "mode": "addToQueue",
+        "assets": [{"video": {"url": video_url}}],
+    }
+    result = buffer_graphql(mutation, {"input": payload}).get("createPost") or {}
+    post = result.get("post") or {}
+    if not post.get("id"):
+        raise RuntimeError("Buffer no programó el Short: " + str(result.get("message", "sin motivo"))[:180])
+    print("BUFFER EN COLA. Fecha programada: " + str(post.get("dueAt", "según cola")), flush=True)
+    return post["id"]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["verify", "publish"], default="verify")
     parser.add_argument("--short", default="perros-01")
-    parser.add_argument("--platforms", choices=["both", "youtube", "facebook"], default="both")
+    parser.add_argument("--platforms", choices=["both", "youtube", "facebook", "tiktok", "all"], default="both")
     parser.add_argument("--skip-drive-check", action="store_true", help="Diagnóstico de OAuth YouTube sin consultar Drive")
     args = parser.parse_args()
     if args.short != "todos" and args.short not in MANIFEST:
         raise RuntimeError("Short no existe: " + args.short)
     selected = sorted(MANIFEST) if args.short == "todos" else [args.short]
-    platforms = ["youtube", "facebook"] if args.platforms == "both" else [args.platforms]
+    platforms = (["youtube", "facebook", "tiktok"] if args.platforms == "all" else
+                 ["youtube", "facebook"] if args.platforms == "both" else [args.platforms])
 
     # Diagnóstico separado de las tres conexiones; no subir si falla alguna seleccionada.
     failures = []
     yt = None
     fb = None
+    tiktok_channel = None
     if "youtube" in platforms:
         try:
             yt = verify_youtube()
@@ -221,6 +336,15 @@ def main():
             fb = verify_facebook()
         except Exception as exc:
             failures.append("Facebook: " + str(exc))
+    if "tiktok" in platforms:
+        try:
+            tiktok_channel = verify_tiktok()
+        except Exception as exc:
+            failures.append("TikTok/Buffer: " + str(exc))
+        try:
+            verify_cloudinary()
+        except Exception as exc:
+            failures.append("Cloudinary: " + str(exc))
     with tempfile.TemporaryDirectory(prefix="eon_") as temp:
         target = Path(temp) / "YouTube.txt"
         try:
@@ -260,20 +384,26 @@ def main():
                     if platform == "youtube":
                         published_id = youtube_upload(yt, video, metadata)
                         public_link = "https://www.youtube.com/watch?v=" + published_id
-                    else:
+                    elif platform == "facebook":
                         published_id = facebook_upload(fb[0], fb[1], video, metadata)
                         public_link = "https://www.facebook.com/" + published_id
+                    else:
+                        hosted_url = cloudinary_upload(short_id, video)
+                        published_id = tiktok_queue(tiktok_channel, hosted_url, metadata)
+                        public_link = ("https://publish.buffer.com/channels/" +
+                                       tiktok_channel + "/schedule")
                     # Registrar enseguida la subida exitosa, antes de la siguiente.
                     state.setdefault(short_id, {})[platform] = {
-                        "id": published_id, "url": public_link, "drive_file_id": entry["video_id"]
+                        "id": published_id, "url": public_link, "drive_file_id": entry["video_id"],
+                        "status": "en_cola" if platform == "tiktok" else "publicado"
                     }
                     try:
                         sha = gh_state("write", state, sha)
                     except Exception:
-                        raise RuntimeError("Se publicó " + short_id + " en " + platform +
+                        raise RuntimeError("Se registró en la plataforma " + platform + " el Short " + short_id +
                             " (ID " + published_id + "), PERO falló el registro antidupli" +
                             "cados. No repitas esta ejecución sin comprobarlo.") from None
-                    print("PUBLICADO " + short_id + " en " + platform + ": " + public_link, flush=True)
+                    print(("PROGRAMADO " if platform == "tiktok" else "PUBLICADO ") + short_id + " en " + platform + ": " + public_link, flush=True)
 
 if __name__ == "__main__":
     main()
