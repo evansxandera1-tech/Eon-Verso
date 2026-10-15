@@ -1,4 +1,4 @@
-name: EON-Verso - YouTube y Facebook
+name: EON-Verso - YouTube, Facebook y TikTok
 on:
   push:
     paths:
@@ -37,11 +37,11 @@ on:
           - suenos-08
           - todos
       omitir_drive:
-        description: "Diagnóstico de YouTube sin Drive (solo modo verify)"
+        description: "Comprobar conexiones sin leer Drive (solo verify)"
         type: boolean
         default: false
       plataformas:
-        description: "Publicar YouTube, Facebook o ambos"
+        description: "Elegir plataformas; TikTok usa Buffer"
         type: choice
         required: true
         default: both
@@ -49,6 +49,8 @@ on:
           - both
           - youtube
           - facebook
+          - tiktok
+          - all
 
 permissions:
   contents: write
@@ -94,6 +96,10 @@ jobs:
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           MODE: ${{ github.event_name == 'push' && 'verify' || inputs.modo }}
