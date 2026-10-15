@@ -1,0 +1,72 @@
+{
+  "perros-01": {
+    "video_id": "13qEdeRUATx48Z4ZMeFDxd4RT9m_rpD5I",
+    "metadata_id": "1CyDDNJvwU3w65BdaPqYN69nSzcIx-8Wf",
+    "filename": "EON_Verso_Perros_Short_01_V1_2.mp4"
+  },
+  "perros-02": {
+    "video_id": "1hLbshzcV0dc4QRonDjouqxxTR0Lzczir",
+    "metadata_id": "1IBTWUPBOEPgqsxjul7H4dcHECzBxQ7OG",
+    "filename": "EON_Verso_Perros_Short_02_V1_2.mp4"
+  },
+  "perros-03": {
+    "video_id": "1M60f8FuHrxpZ2ZCOv7vIyJB22lG2Wt3g",
+    "metadata_id": "1m3NkxYddHNAnnZYld90CpWwMty_DXSPK",
+    "filename": "EON_Verso_Perros_Short_03_V1_2.mp4"
+  },
+  "perros-04": {
+    "video_id": "15f0rdQmTevFB8zdWgtGb5GGuTpSHt8Mq",
+    "metadata_id": "1gx6XEJvd_f3nVsIZcb-LTHWJ8dKTqo6S",
+    "filename": "EON_Verso_Perros_Short_04_V1_2.mp4"
+  },
+  "perros-05": {
+    "video_id": "1fpPRPNR7eY411m0d7sLj4P5ziI6ucYyE",
+    "metadata_id": "1lf8syIx_Wn4Qw9XoxmR0LRyFZ-uburVX",
+    "filename": "EON_Verso_Perros_Short_05_V1_2.mp4"
+  },
+  "perros-06": {
+    "video_id": "13H7bLAntoarA9BrOaesvgMfAuxv8wYzl",
+    "metadata_id": "1wSt8D1XshM1pTW7AzAKHk8vTmDLzYCzS",
+    "filename": "EON_Verso_Perros_Short_06_V1_2.mp4"
+  },
+  "suenos-01": {
+    "video_id": "1GZkmgNdDFCuIvCO3EI3otsulZozYrshY",
+    "metadata_id": "1xCPXC3NpHczp7dtVO4ELSICPUQd8h5-c",
+    "filename": "EON_Verso_Suenos_Short_01_V3.mp4"
+  },
+  "suenos-02": {
+    "video_id": "1tpN587VeWQRHu9zFYxIfPQRNvedWpfbz",
+    "metadata_id": "1vMJSEQH5WDr7imIdl4d2zamksHhUdVYh",
+    "filename": "EON_Verso_Suenos_Short_02_V3.mp4"
+  },
+  "suenos-03": {
+    "video_id": "1y_XaOotRMWqpYeO08yCFcLHKTS_Eb3to",
+    "metadata_id": "1k4lVCXUbyBb4r45AW8gAyDtquUm8K1Rx",
+    "filename": "EON_Verso_Suenos_Short_03_V3.mp4"
+  },
+  "suenos-04": {
+    "video_id": "1fcyjkZyE56E24Tud47LLDdTOafGkuCCJ",
+    "metadata_id": "1-xQf1eTt3nWehWyXLxWZOrKzSNtsyr9b",
+    "filename": "EON_Verso_Suenos_Short_04_V3.mp4"
+  },
+  "suenos-05": {
+    "video_id": "1x6vg7N9XrH5vXC0pkYqZCLNILlItOijv",
+    "metadata_id": "185XlR4QKd_F2JwxQ95rfPayqoaDujGdF",
+    "filename": "EON_Verso_Suenos_Short_05_V3.mp4"
+  },
+  "suenos-06": {
+    "video_id": "1jrvkAz4KT-xqYiWh09pYWLtiinlSpEdg",
+    "metadata_id": "1YMCNO-uPAU9SHzK9pHpAQ58zTledMd3K",
+    "filename": "EON_Verso_Suenos_Short_06_V3.mp4"
+  },
+  "suenos-07": {
+    "video_id": "1M34LkPqxH0UBvbvorbXVo-tZJ8_3VuJZ",
+    "metadata_id": "1BPUoHJTmpi8z-o8wDOwAdvjNWjld-tLz",
+    "filename": "EON_Verso_Suenos_Short_07_V3.mp4"
+  },
+  "suenos-08": {
+    "video_id": "1yqEdtcvpgSF6a_OmuyzADTyGuR6k_a6r",
+    "metadata_id": "1rdrFUuK9HhXSAZVbOB7FyFEZh1WLtCWE",
+    "filename": "EON_Verso_Suenos_Short_08_V3.mp4"
+  }
+}
