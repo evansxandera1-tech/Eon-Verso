@@ -1,9 +1,5 @@
 name: EON-Verso - Documental Oceano YouTube y Facebook
 on:
-  push:
-    paths:
-      - ".github/workflows/publicar_oceano.yml"
-      - "eon_oceano_publicador.py"
   workflow_dispatch:
 permissions:
   contents: write
