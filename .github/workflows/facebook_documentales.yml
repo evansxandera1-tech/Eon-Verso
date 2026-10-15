@@ -38,4 +38,4 @@ jobs:
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python eon_facebook_documentales.py --mode verify
+        run: python eon_facebook_documentales.py --mode publish
