@@ -1,9 +1,5 @@
 name: EON-Verso - Documentales Sueños y Perros Facebook
 on:
-  push:
-    paths:
-      - ".github/workflows/facebook_documentales.yml"
-      - "eon_facebook_documentales.py"
   workflow_dispatch:
 permissions:
   contents: write
