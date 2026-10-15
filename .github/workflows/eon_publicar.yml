@@ -36,6 +36,10 @@ on:
           - suenos-07
           - suenos-08
           - todos
+      omitir_drive:
+        description: "Diagnóstico de YouTube sin Drive (solo modo verify)"
+        type: boolean
+        default: false
       plataformas:
         description: "Publicar YouTube, Facebook o ambos"
         type: choice
@@ -95,4 +99,10 @@ jobs:
           MODE: ${{ github.event_name == 'push' && 'verify' || inputs.modo }}
           SHORT: ${{ github.event_name == 'push' && 'perros-01' || inputs.short }}
           PLATFORMS: ${{ github.event_name == 'push' && 'both' || inputs.plataformas }}
-        run: python eon_publish.py --mode "$MODE" --short "$SHORT" --platforms "$PLATFORMS"
+          SKIP_DRIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.omitir_drive || false }}
+        run: |
+          if [[ "$SKIP_DRIVE" == "true" && "$MODE" == "verify" ]]; then
+            python eon_publish.py --mode "$MODE" --short "$SHORT" --platforms "$PLATFORMS" --skip-drive-check
+          else
+            python eon_publish.py --mode "$MODE" --short "$SHORT" --platforms "$PLATFORMS"
+          fi
