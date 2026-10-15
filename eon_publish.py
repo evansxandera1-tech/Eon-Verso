@@ -85,8 +85,16 @@ def verify_youtube():
         result = youtube.channels().list(part="id,snippet", mine=True).execute()
     except Exception as exc:
         status = getattr(exc, "status_code", None) or getattr(getattr(exc, "resp", None), "status", None)
-        raise RuntimeError("YouTube no permitió comprobar el canal. Código HTTP: " +
-            str(status or "no disponible") + ". Puede faltar permiso OAuth, haber expirado el token o haberse autorizado otra cuenta.") from None
+        raw = getattr(exc, "content", b"")
+        try:
+            payload = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+            api_error = payload.get("error", {})
+            reason = api_error.get("errors", [{}])[0].get("reason", "desconocido")
+            message = api_error.get("message", "Sin detalles")
+        except (ValueError, TypeError, IndexError, AttributeError):
+            reason, message = "desconocido", "Sin detalles"
+        raise RuntimeError("YouTube rechazó la verificación (HTTP " + str(status or "?") +
+            ", razón: " + reason + ", mensaje: " + message[:300] + "). No se publicó nada.") from None
     channels = result.get("items", [])
     if len(channels) != 1 or channels[0].get("id") != EXPECTED_YT:
         names = ", ".join(c.get("snippet", {}).get("title", "desconocido") for c in channels) or "ninguno"
@@ -182,6 +190,7 @@ def main():
     parser.add_argument("--mode", choices=["verify", "publish"], default="verify")
     parser.add_argument("--short", default="perros-01")
     parser.add_argument("--platforms", choices=["both", "youtube", "facebook"], default="both")
+    parser.add_argument("--skip-drive-check", action="store_true", help="Diagnóstico de OAuth YouTube sin consultar Drive")
     args = parser.parse_args()
     if args.short != "todos" and args.short not in MANIFEST:
         raise RuntimeError("Short no existe: " + args.short)
@@ -205,9 +214,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix="eon_") as temp:
         target = Path(temp) / "YouTube.txt"
         try:
-            rclone_file(MANIFEST[selected[0]]["metadata_id"], target)
-            sample = parse_metadata(target.read_text(encoding="utf-8-sig"))
-            print("DRIVE OK. Ejemplo de título: " + sample["title"], flush=True)
+            if args.skip_drive_check and args.mode == "verify":
+                print("DRIVE OMITIDO: prueba exclusiva de OAuth.", flush=True)
+            else:
+                rclone_file(MANIFEST[selected[0]]["metadata_id"], target)
+                sample = parse_metadata(target.read_text(encoding="utf-8-sig"))
+                print("DRIVE OK. Ejemplo de título: " + sample["title"], flush=True)
         except Exception as exc:
             failures.append("Google Drive: " + str(exc))
         if failures:
