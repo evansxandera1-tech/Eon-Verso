@@ -256,8 +256,8 @@ def cloudinary_error_detail(response, cloud, key, secret):
     for credential in (secret, key, cloud):
         if credential:
             detail = re.sub(re.escape(credential), "[OCULTO]", detail, flags=re.IGNORECASE)
-    detail = re.sub(r"(?i)https?://\\S+", "[URL OCULTA]", detail)
-    detail = re.sub(r"(?i)(api[_ -]?secret|api[_ -]?key|access[_ -]?token|authorization)\\s*[:=]\\s*[^\\s,;]+", r"\\1=[OCULTO]", detail)
+    detail = re.sub(r"(?i)https?://\S+", "[URL OCULTA]", detail)
+    detail = re.sub(r"(?i)(api[_ -]?secret|api[_ -]?key|access[_ -]?token|authorization)\s*[:=]\s*[^\s,;]+", r"\1=[OCULTO]", detail)
     return " ".join(detail.split())[:220]
 
 
