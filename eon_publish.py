@@ -17,6 +17,9 @@ from googleapiclient.http import MediaFileUpload
 HERE = Path(__file__).resolve().parent
 MANIFEST = json.loads((HERE / "eon_shorts.json").read_text(encoding="utf-8"))
 EXPECTED_YT = "UCQI8q5L9aHk8BvznYj9hxsg"
+EXPECTED_FB_PAGE_ID = "111079017290300"
+EXPECTED_FB_PAGE_NAME = "Ojo al Piojo"
+VERSION = "1.1"
 GRAPH_VERSION = "v25.0"
 HEADINGS = (
     "TÍTULO PARA YOUTUBE SHORTS", "DESCRIPCIÓN", "HASHTAGS",
@@ -109,6 +112,8 @@ def verify_youtube():
 
 def verify_facebook():
     page_id = require("FACEBOOK_PAGE_ID")
+    if page_id != EXPECTED_FB_PAGE_ID:
+        raise RuntimeError("FACEBOOK_PAGE_ID no coincide con la página autorizada Ojo al Piojo. Detenido.")
     token = require("FACEBOOK_PAGE_TOKEN")
     r = requests.get(
         f"https://graph.facebook.com/{GRAPH_VERSION}/{page_id}",
@@ -122,8 +127,8 @@ def verify_facebook():
         raise RuntimeError("Facebook no permitió comprobar la página (código " + str(code) + "). Revisa PAGE_TOKEN.") from None
     page_name = data.get("name", "")
     normalized = re.sub(r"[^a-z0-9]+", "", page_name.casefold())
-    if data.get("id") != page_id or "eonverso" not in normalized:
-        raise RuntimeError("El token Facebook está ligado a '" + page_name + "', no a la página EON-Verso. Detenido.")
+    if data.get("id") != EXPECTED_FB_PAGE_ID or normalized != "ojoalpiojo":
+        raise RuntimeError("El token Facebook está ligado a '" + page_name + "', no a la página Ojo al Piojo. Detenido.")
     print("FACEBOOK OK: " + page_name, flush=True)
     return page_id, token
 
