@@ -111,7 +111,7 @@ def discover():
         for item in items:
             name = item.get("Name", "")
             match = re.fullmatch(
-                rf"EON_Verso_{STEMS[topic]}_Short_(\\d+)_FINAL(?:_V\\d+)?\\.mp4",
+                rf"EON_Verso_{STEMS[topic]}_Short_(\d+)_FINAL(?:_V\d+)?\.mp4",
                 name, flags=re.IGNORECASE,
             )
             if not match or not item.get("ID"):
