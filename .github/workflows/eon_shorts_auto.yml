@@ -10,7 +10,7 @@ permissions:
   contents: write
 concurrency:
   group: eon-publicacion-shorts
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   shorts:
     runs-on: ubuntu-latest
