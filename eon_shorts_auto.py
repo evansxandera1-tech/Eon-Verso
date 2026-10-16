@@ -201,6 +201,9 @@ def tiktok_now(channel, video_url, meta):
 def run_once(mode):
     print(f"EON SHORTS AUTOMÁTICOS v{VERSION}, modo={mode}", flush=True)
     state, sha = gh_state("read")
+    if mode == "first" and all(p in state.get("perros-01", {}) for p in ALL_PLATFORMS):
+        print("PRIMER SHORT YA PROCESADO: no iniciar un segundo fuera de horario.", flush=True)
+        return
     files = discover()
     key, entry = choose(files, state, mode)
     if key is None:
