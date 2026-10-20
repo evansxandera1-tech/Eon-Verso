@@ -348,5 +348,14 @@
       "drive_file_id": "1rzUUvbtSmqmcegW6jIvStYUZuRg1gWHf",
       "utc": "2026-10-20T18:26:12.228184+00:00"
     }
+  },
+  "perros-06": {
+    "youtube": {
+      "id": "j8gzxoJVchY",
+      "url": "https://www.youtube.com/watch?v=j8gzxoJVchY",
+      "status": "subido",
+      "drive_file_id": "1d0NOaAa7Gihlh3FSe2eGnbGu2rCrWJcQ",
+      "utc": "2026-10-20T23:06:31.565030+00:00"
+    }
   }
 }
