@@ -409,6 +409,13 @@
       "status": "subido",
       "drive_file_id": "1zFOASIODzPoiCiW8pHX0u-ZHx6hFGzaM",
       "utc": "2026-10-21T23:10:39.938113+00:00"
+    },
+    "tiktok": {
+      "id": "6ad94673b5ae3ccc5eb7b789",
+      "url": "https://publish.buffer.com/",
+      "status": "enviado_a_buffer_sending",
+      "drive_file_id": "1zFOASIODzPoiCiW8pHX0u-ZHx6hFGzaM",
+      "utc": "2026-10-21T23:10:53.168123+00:00"
     }
   }
 }
