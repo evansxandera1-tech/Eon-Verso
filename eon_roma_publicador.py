@@ -16,9 +16,9 @@ from googleapiclient.http import MediaFileUpload
 
 CHANNEL_ID = "UCQI8q5L9aHk8BvznYj9hxsg"
 DRIVE_DIR = "EON-Verso/Publicacion_Roma"
-PART_COUNT = 14
-VIDEO_SIZE = 229718869
-VIDEO_SHA256 = "d43013773e576bdb5fed7f3b988a59618cbf1469ccbdcb59882822bac6ad45a5"
+PART_COUNT = 1
+VIDEO_SIZE = 32359491
+VIDEO_SHA256 = "0b5a76cf79708b85ef5f6deeafba1080749b0e8f5fa09f626ea0bb808a614fe9"
 STATE_FILE = "eon-roma-publication-state.json"
 TITLE = "ROMA: El imperio que dominó el mundo"
 DESCRIPTION = (
@@ -75,37 +75,27 @@ def state_write(data, sha):
     return response.json()["content"]["sha"]
 
 def reconstruct(work):
-    output = work / "ROMA_1080P_SOLO_VOZ.mp4"
+    output = work / "ROMA_480P_PUBLICACION.mp4"
+    subprocess.run(["rclone", "copyto", "gdrive:" + DRIVE_DIR + "/" + output.name, str(output)],
+                   check=True, timeout=1200)
+    if not output.is_file() or output.stat().st_size != VIDEO_SIZE:
+        raise RuntimeError("Video 480p ausente o tamaño incorrecto.")
     digest = hashlib.sha256()
-    size = 0
-    with output.open("wb") as target:
-        for n in range(PART_COUNT):
-            filename = f"roma_1080p.part{n:02d}"
-            part = work / filename
-            subprocess.run(["rclone", "copyto", "gdrive:" + DRIVE_DIR + "/" + filename, str(part)],
-                           check=True, timeout=1200)
-            expected = 16 * 1024 * 1024 if n < PART_COUNT - 1 else VIDEO_SIZE - (PART_COUNT - 1) * 16 * 1024 * 1024
-            if not part.is_file() or part.stat().st_size != expected:
-                raise RuntimeError("Parte inválida: " + filename)
-            with part.open("rb") as stream:
-                while chunk := stream.read(4 * 1024 * 1024):
-                    digest.update(chunk)
-                    target.write(chunk)
-                    size += len(chunk)
-            part.unlink()
-            print(f"ROMA parte {n+1}/{PART_COUNT} verificada", flush=True)
-    if size != VIDEO_SIZE or digest.hexdigest() != VIDEO_SHA256:
-        raise RuntimeError("ROMA no coincide con el SHA256 original; no publicar.")
+    with output.open("rb") as stream:
+        while chunk := stream.read(4 * 1024 * 1024):
+            digest.update(chunk)
+    if digest.hexdigest() != VIDEO_SHA256:
+        raise RuntimeError("Video 480p no coincide con SHA256.")
     probe = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries",
         "format=duration:stream=codec_type,width,height", "-of", "json", str(output)], text=True)
     info = json.loads(probe)
     duration = float(info["format"]["duration"])
     streams = info["streams"]
     if not (765 <= duration <= 775 and
-            any(s.get("codec_type") == "video" and s.get("width") == 1920 and s.get("height") == 1080 for s in streams) and
+            any(s.get("codec_type") == "video" and s.get("width") == 854 and s.get("height") == 480 for s in streams) and
             any(s.get("codec_type") == "audio" for s in streams)):
         raise RuntimeError("ROMA: duración, video o audio incorrectos.")
-    print(f"MP4 verificado: {duration:.2f}s, SHA256 {digest.hexdigest()}", flush=True)
+    print(f"MP4 480p verificado: {duration:.2f}s, SHA256 {digest.hexdigest()}", flush=True)
     return output
 
 def thumbnail(work):
