@@ -49,6 +49,5 @@ jobs:
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        env:
           RAGNAR_MODE: ${{ github.event_name == 'push' && 'publish' || inputs.modo }}
         run: python eon_ragnar_publicador.py --mode "$RAGNAR_MODE"
