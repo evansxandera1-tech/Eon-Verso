@@ -38,8 +38,6 @@ jobs:
           printf '%s' "$RCLONE_CONFIG_BASE64" | base64 --decode > ~/.config/rclone/rclone.conf
           chmod 600 ~/.config/rclone/rclone.conf
           rclone listremotes | grep -Fx 'gdrive:'
-      - name: Comprobar ffprobe preinstalado
-        run: command -v ffprobe && ffprobe -version | head -n 1
       - name: Dependencias
         run: pip install --disable-pip-version-check requests google-auth google-api-python-client
       - name: Verificar y publicar ROMA
