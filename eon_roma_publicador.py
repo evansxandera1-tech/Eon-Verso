@@ -86,16 +86,7 @@ def reconstruct(work):
             digest.update(chunk)
     if digest.hexdigest() != VIDEO_SHA256:
         raise RuntimeError("Video 480p no coincide con SHA256.")
-    probe = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries",
-        "format=duration:stream=codec_type,width,height", "-of", "json", str(output)], text=True)
-    info = json.loads(probe)
-    duration = float(info["format"]["duration"])
-    streams = info["streams"]
-    if not (765 <= duration <= 775 and
-            any(s.get("codec_type") == "video" and s.get("width") == 854 and s.get("height") == 480 for s in streams) and
-            any(s.get("codec_type") == "audio" for s in streams)):
-        raise RuntimeError("ROMA: duración, video o audio incorrectos.")
-    print(f"MP4 480p verificado: {duration:.2f}s, SHA256 {digest.hexdigest()}", flush=True)
+    print(f"MP4 480p verificado: {output.stat().st_size} bytes, SHA256 {digest.hexdigest()}", flush=True)
     return output
 
 def thumbnail(work):
