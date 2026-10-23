@@ -1,5 +1,9 @@
 name: EON-Verso - Ragnar Pro YouTube y Ojo al Piojo
 on:
+  push:
+    branches: [main]
+    paths:
+      - "ragnar_publish_once.trigger"
   workflow_dispatch:
     inputs:
       modo:
@@ -45,4 +49,6 @@ jobs:
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python eon_ragnar_publicador.py --mode "${{ inputs.modo }}"
+        env:
+          RAGNAR_MODE: ${{ github.event_name == 'push' && 'publish' || inputs.modo }}
+        run: python eon_ragnar_publicador.py --mode "$RAGNAR_MODE"
