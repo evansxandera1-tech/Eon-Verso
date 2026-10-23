@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Publicador dedicado Ragnar -> YouTube EON-Verso + Facebook Ojo al Piojo.
+"""Publicador dedicado V2 1080p recibida -> YouTube EON-Verso + Facebook Ojo al Piojo.
 
-Fuente canónica del montaje Pro: Google Drive, nunca sustituir por V2.
+Reconstruye las 16 partes en Drive y verifica SHA256 antes de publicar.
 Usa los secretos ya existentes en el repositorio HSF/Eon-Verso.
 """
 import argparse
+import hashlib
 import base64
 import json
 import os
@@ -23,7 +24,10 @@ FB_ID = "111079017290300"
 FB_NAME = "Ojo al Piojo"
 GRAPH = "v25.0"
 ZIP_DRIVE_ID = "1FzYK8HKiLXZe3pAH_SSJCFduXhRcA3TA"
-VIDEO_DRIVE_PATH = "EON-Verso/Publicacion_Ragnar/EON_VERSO_RAGNAR_REHECHO_PRO_720P_COMPLETO.mp4"
+VIDEO_DRIVE_PATH = "EON-Verso/Publicacion_Ragnar/V2_ARCHIVO_PARTES"
+EXPECTED_SHA256 = "2342ab59482a9d15fa070bb3313cfe863978ea13e32da79df60809fb17109563"
+EXPECTED_SIZE = 266095087
+PART_COUNT = 16
 STATE_FILE = "eon-ragnar-publication-state.json"
 
 
@@ -104,6 +108,33 @@ def text_file(p):
     return p.read_text(encoding="utf-8-sig").strip()
 
 
+def rebuild_original_v2(directory, dest):
+    """Descarga los fragmentos de Drive en orden y reconstruye el MP4 exacto de usuario."""
+    total = 0
+    dig = hashlib.sha256()
+    with dest.open("wb") as target:
+        for part_no in range(1, PART_COUNT + 1):
+            part_name = f"ragnar_v2_1080p.part{part_no:02d}"
+            part = directory / part_name
+            rclone_copy(["copyto", "gdrive:" + VIDEO_DRIVE_PATH + "/" + part_name], part)
+            expected_part = 16 * 1024 * 1024 if part_no < PART_COUNT else EXPECTED_SIZE - 15 * 16 * 1024 * 1024
+            if part.stat().st_size != expected_part:
+                raise RuntimeError(f"Parte {part_no} invalida: {part.stat().st_size} bytes; se esperaban {expected_part}")
+            with part.open("rb") as stream:
+                while True:
+                    chunk = stream.read(4 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    target.write(chunk)
+                    dig.update(chunk)
+                    total += len(chunk)
+            part.unlink()
+            print(f"DRIVE RAGNAR: parte {part_no}/{PART_COUNT} OK", flush=True)
+    if total != EXPECTED_SIZE or dig.hexdigest() != EXPECTED_SHA256:
+        raise RuntimeError(f"SHA256 del MP4 recibido no coincide: bytes={total}, hash={dig.hexdigest()}")
+    print("SHA256 ORIGINAL RECIBIDO VERIFICADO:", dig.hexdigest(), flush=True)
+
+
 def verify_movie(path):
     if path.stat().st_size < 20_000_000:
         raise RuntimeError("Video Pro demasiado pequeno: descarga incompleta.")
@@ -116,10 +147,10 @@ def verify_movie(path):
     video = next((s for s in info["streams"] if s.get("codec_type") == "video"), None)
     audio = next((s for s in info["streams"] if s.get("codec_type") == "audio"), None)
     if not (855 <= dur <= 865 and video and audio):
-        raise RuntimeError(f"Montaje incorrecto: duracion {dur:.2f}, audio/video faltante.")
+        raise RuntimeError(f"V2 incorrecta: duracion {dur:.2f}, audio/video faltante.")
     if video.get("width", 0) < 1280 or video.get("height", 0) < 720:
-        raise RuntimeError("Video Pro menor que 720p.")
-    print(f"VIDEO PRO OK: {dur:.2f}s, {video['width']}x{video['height']}", flush=True)
+        raise RuntimeError("Video V2 inferior a 720p.")
+    print(f"VIDEO V2 OK: {dur:.2f}s, {video['width']}x{video['height']}", flush=True)
 
 
 def upload_youtube(client, movie, title, description, tags):
@@ -178,9 +209,9 @@ def main():
         thumb = assets / "MINIATURA_RAGNAR_EXISTIO_1280x720.jpg"
         if not (thumb.is_file() and thumb.stat().st_size < 2_000_000):
             raise RuntimeError("Miniatura JPG invalida.")
-        movie = work / Path(VIDEO_DRIVE_PATH).name
-        print("Descargando montaje Pro canónico desde Drive...", flush=True)
-        rclone_copy(["copyto", "gdrive:" + VIDEO_DRIVE_PATH], movie)
+        movie = work / "EON_VERSO_RAGNAR_MONTAJE_CINEMATOGRAFICO_V2_1080P.mp4"
+        print("Reconstruyendo V2 1080p recibida (16 partes de Drive)...", flush=True)
+        rebuild_original_v2(work, movie)
         verify_movie(movie)
 
         if opts.mode == "verify":
@@ -189,7 +220,7 @@ def main():
 
         if "youtube_id" not in state:
             state["youtube_id"] = upload_youtube(yt, movie, title, description, tags)
-            state["source"] = VIDEO_DRIVE_PATH
+            state["source"] = VIDEO_DRIVE_PATH + "/ (SHA256 " + EXPECTED_SHA256 + ")"
             sha = save_state(state, sha)
         if not state.get("thumbnail_done"):
             yt.thumbnails().set(
