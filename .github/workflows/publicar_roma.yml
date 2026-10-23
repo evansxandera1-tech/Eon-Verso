@@ -15,7 +15,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: eon-roma-publicacion
+  group: eon-roma-publicacion-480p
   cancel-in-progress: true
 jobs:
   publicar_roma:
