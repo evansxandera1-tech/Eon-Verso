@@ -172,18 +172,81 @@ def upload_youtube(client, movie, title, description, tags):
     return done["id"]
 
 
+def existing_facebook_video(token, title):
+    """Comprueba si Facebook ya aceptó la publicación anterior."""
+    res = requests.get(
+        f"https://graph.facebook.com/{GRAPH}/{FB_ID}/videos",
+        params={"access_token": token, "fields": "id,title,created_time",
+                "limit": 100}, timeout=40)
+    try:
+        payload = res.json()
+    except ValueError:
+        raise RuntimeError("Facebook no devolvió JSON al comprobar videos existentes (HTTP %s)" % res.status_code)
+    if not res.ok or "data" not in payload:
+        raise RuntimeError("No se pudo consultar la lista de videos Facebook: HTTP %s: %s"
+                           % (res.status_code, str(payload.get("error", {}))[:350]))
+    expected = title.strip().casefold()
+    for item in payload["data"]:
+        if item.get("title", "").strip().casefold() == expected:
+            print("FACEBOOK EXISTENTE; SE EVITA DUPLICADO:", item.get("id"), flush=True)
+            return item["id"]
+    print("FACEBOOK: no hay publicación anterior con ese título", flush=True)
+    return None
+
+
+def fb_json(res, operation):
+    try:
+        value = res.json()
+    except ValueError:
+        raise RuntimeError("Facebook %s respondió HTTP %s con contenido no JSON (%s, %d bytes)"
+                           % (operation, res.status_code, res.headers.get("content-type", "-"),
+                              len(res.content)))
+    if not res.ok or value.get("error"):
+        raise RuntimeError("Facebook %s rechazado: HTTP %s: %s"
+                           % (operation, res.status_code, str(value.get("error", value))[:380]))
+    return value
+
+
 def upload_facebook(token, movie, title, description):
+    """Usar protocolo reanudable para archivos de 254 MB."""
+    endpoint = f"https://graph-video.facebook.com/{GRAPH}/{FB_ID}/videos"
+    started = fb_json(requests.post(endpoint, data={
+        "access_token": token, "upload_phase": "start",
+        "file_size": str(movie.stat().st_size)}, timeout=90), "start")
+    session = started["upload_session_id"]
+    offset = int(started["start_offset"])
+    end = int(started["end_offset"])
+    file_size = movie.stat().st_size
+    print("FACEBOOK: sesión resumible iniciada", flush=True)
     with movie.open("rb") as stream:
-        r = requests.post(
-            f"https://graph-video.facebook.com/{GRAPH}/{FB_ID}/videos",
-            data={"access_token": token, "title": title,
-                  "description": description, "published": "true"},
-            files={"source": (movie.name, stream, "video/mp4")},
-            timeout=1400)
-    data = r.json()
-    if not r.ok or not data.get("id"):
-        raise RuntimeError("Error de Facebook: " + str(data.get("error", {}))[:400])
-    return data["id"]
+        while offset < file_size:
+            amount = min(end - offset, file_size - offset)
+            if amount <= 0:
+                raise RuntimeError("Facebook devolvió rango de transferencia vacío.")
+            stream.seek(offset)
+            chunk = stream.read(amount)
+            res = requests.post(endpoint,
+                data={"access_token": token, "upload_phase": "transfer",
+                      "upload_session_id": session, "start_offset": str(offset)},
+                files={"video_file_chunk": ("fragmento.mp4", chunk, "application/octet-stream")},
+                timeout=300)
+            answer = fb_json(res, "transfer")
+            new_offset = int(answer["start_offset"])
+            if new_offset <= offset:
+                raise RuntimeError("Facebook no avanzó el offset de video.")
+            offset = new_offset
+            end = int(answer["end_offset"])
+            print("FACEBOOK: %.1f%%" % (100*min(offset,file_size)/file_size), flush=True)
+    finished = fb_json(requests.post(endpoint, data={
+        "access_token": token, "upload_phase": "finish",
+        "upload_session_id": session, "title": title,
+        "description": description, "published": "true"}, timeout=120), "finish")
+    video_id = started.get("video_id") or finished.get("id") or finished.get("video_id")
+    if not video_id:
+        video_id = existing_facebook_video(token, title)
+    if not video_id:
+        raise RuntimeError("Facebook finalizó carga pero no devolvió ID de video.")
+    return str(video_id)
 
 
 def main():
@@ -209,6 +272,16 @@ def main():
         thumb = assets / "MINIATURA_RAGNAR_EXISTIO_1280x720.jpg"
         if not (thumb.is_file() and thumb.stat().st_size < 2_000_000):
             raise RuntimeError("Miniatura JPG invalida.")
+        if "facebook_id" not in state:
+            already = existing_facebook_video(fb_token, fb_title)
+            if already:
+                state["facebook_id"] = already
+                sha = save_state(state, sha)
+        if state.get("youtube_id") and state.get("thumbnail_done") and state.get("facebook_id"):
+            print("TODO YA PUBLICADO, NO DUPLICAR", flush=True)
+            print("YOUTUBE https://www.youtube.com/watch?v=" + state["youtube_id"])
+            print("FACEBOOK https://www.facebook.com/watch/?v=" + state["facebook_id"])
+            return
         movie = work / "EON_VERSO_RAGNAR_MONTAJE_CINEMATOGRAFICO_V2_1080P.mp4"
         print("Reconstruyendo V2 1080p recibida (16 partes de Drive)...", flush=True)
         rebuild_original_v2(work, movie)
