@@ -12,19 +12,26 @@ from pathlib import Path
 
 import requests
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 FOLDER = "Laboratorio Mental/Publicar"
+DEFAULT_VIDEO = "Laboratorio_Mental_Excusas_SIN_SUBS_540p.mp4"
+DEFAULT_THUMB = "Laboratorio_Mental_Miniatura_FINAL.png"
+SUB_FILES = {"es": "Laboratorio_Mental_Excusas_es.srt", "en": "Laboratorio_Mental_Excusas_en.srt"}
 LOCK_FILE = "laboratorio-mental-canal.json"
 STATE_FILE = "laboratorio-mental-publicaciones.json"
 API = "https://api.github.com/repos/{}/contents/{}"
 DEFAULT_DESCRIPTION = (
-    "A nadie le importan tus excusas. Lo que importa es lo que haces a partir de hoy.\n\n"
+    "¿Por qué sigues postergando tus metas? Aprende a identificar excusas, "
+    "crear hábitos y actuar con disciplina.\n\n"
     "En Laboratorio Mental hablamos de disciplina, hábitos y motivación para avanzar "
     "incluso cuando las circunstancias son difíciles.\n\n"
     "Suscríbete para recibir más reflexiones sobre disciplina y crecimiento personal.\n\n"
-    "Narración y producción originales con asistencia de inteligencia artificial.\n"
+    "Producción independiente inspirada en temas de desarrollo personal asociados a "
+    "Brian Tracy. No es una grabación ni un seminario oficial de Brian Tracy.\n"
+    "Narración e imágenes elaboradas con asistencia de inteligencia artificial.\n"
     "#Disciplina #Motivacion #LaboratorioMental"
 )
 
@@ -73,7 +80,7 @@ def youtube():
         client_secret=need("LAB_YOUTUBE_CLIENT_SECRET"),
         token_uri="https://oauth2.googleapis.com/token",
     )
-    return build("youtube", "v3", credentials=creds, cache_discovery=False)
+    return build("youtube", "v3", credentials=creds, cache_discovery=False), creds
 
 
 def validate_channel(yt, mode):
@@ -99,13 +106,13 @@ def validate_channel(yt, mode):
     return cid
 
 
-def local_copy(folder, filename):
+def local_copy(folder, filename, minimum=1_048_576):
     if filename != Path(filename).name or not filename or filename.startswith("."):
-        raise ValueError("Nombre de archivo inválido; usa solo el nombre del MP4.")
+        raise ValueError("Nombre de archivo inválido; usa solo el nombre del archivo.")
     target = folder / filename
     source = "gdrive:" + FOLDER + "/" + filename
     subprocess.run(["rclone", "copyto", source, str(target)], check=True, timeout=1800)
-    if not target.is_file() or target.stat().st_size < 1024 * 1024:
+    if not target.is_file() or target.stat().st_size < minimum:
         raise RuntimeError("Archivo ausente, vacío o demasiado pequeño en Drive: " + filename)
     return target
 
@@ -132,8 +139,9 @@ def upload(yt, path, title, privacy):
         "snippet": {
             "title": title,
             "description": DEFAULT_DESCRIPTION,
-            "tags": ["disciplina", "motivación", "hábitos", "superación personal",
-                     "desarrollo personal", "Laboratorio Mental"],
+            "tags": ["Brian Tracy", "inspirado en Brian Tracy", "cómo dejar las excusas",
+                     "disciplina personal", "motivación en español", "hábitos",
+                     "superación personal", "desarrollo personal", "Laboratorio Mental"],
             "categoryId": "27",
             "defaultLanguage": "es",
         },
@@ -157,11 +165,75 @@ def upload(yt, path, title, privacy):
     return result["id"]
 
 
+
+def require_captions_permission(creds):
+    """Check permission before uploading a video that requires bilingual captions."""
+    if not creds.valid:
+        creds.refresh(Request())
+    response = requests.get("https://oauth2.googleapis.com/tokeninfo",
+                            params={"access_token": creds.token}, timeout=30)
+    response.raise_for_status()
+    granted = set(response.json().get("scope", "").split())
+    required = "https://www.googleapis.com/auth/youtube.force-ssl"
+    if required not in granted:
+        raise RuntimeError(
+            "FALTA PERMISO PARA SUBTITULOS: el Refresh Token no incluye youtube.force-ssl. "
+            "Genera otro Refresh Token autorizando DOS permisos: "
+            "https://www.googleapis.com/auth/youtube y "
+            "https://www.googleapis.com/auth/youtube.force-ssl. "
+            "Sustituye solo LAB_YOUTUBE_REFRESH_TOKEN. "
+            "No se ha subido el video."
+        )
+    print("PERMISOS OK: youtube.force-ssl habilita subtitulos", flush=True)
+
+
+def validate_subtitles(es, en):
+    import re
+    def marks(path):
+        data = path.read_text(encoding="utf-8-sig")
+        pairs = re.findall(r"(?m)^(\d\d:\d\d:\d\d,\d{3}) --> "
+                           r"(\d\d:\d\d:\d\d,\d{3})", data)
+        if len(pairs) < 20:
+            raise RuntimeError("SRT incompleto: " + path.name)
+        return pairs
+    es_marks, en_marks = marks(es), marks(en)
+    if es_marks != en_marks:
+        raise RuntimeError("Los SRT español e inglés no están sincronizados.")
+    print("SRT OK: %s intervalos idénticos para español e inglés" %
+          len(es_marks), flush=True)
+
+
+def upload_caption(yt, video_id, lang, path):
+    name = "Español" if lang == "es" else "English"
+    existing = yt.captions().list(part="snippet", videoId=video_id).execute()
+    for item in existing.get("items", []):
+        sn = item.get("snippet", {})
+        if sn.get("language") == lang and sn.get("name") == name:
+            print("SUBTITULOS YA EXISTEN: " + name, flush=True)
+            return
+    yt.captions().insert(
+        part="snippet",
+        body={"snippet": {"videoId": video_id, "language": lang,
+                          "name": name, "isDraft": False}},
+        media_body=MediaFileUpload(str(path), mimetype="application/octet-stream"),
+    ).execute()
+    print("SUBTITULOS SUBIDOS: " + name, flush=True)
+
+
+def upload_thumbnail(yt, video_id, path):
+    mime = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    yt.thumbnails().set(
+        videoId=video_id,
+        media_body=MediaFileUpload(str(path), mimetype=mime)
+    ).execute()
+    print("MINIATURA PERSONALIZADA SUBIDA", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--modo", choices=("identificar", "verificar", "publicar"), required=True)
-    parser.add_argument("--video", default="EON_Excusas_Subtitulado.mp4")
-    parser.add_argument("--titulo", default="A Nadie Le Importan Tus Excusas | La Disciplina Cambia Tu Vida")
+    parser.add_argument("--video", default=DEFAULT_VIDEO)
+    parser.add_argument("--titulo", default="Cómo Dejar las Excusas y Desarrollar Disciplina | Inspirado en Brian Tracy")
     parser.add_argument("--privacidad", choices=("private", "unlisted", "public"), default="private")
     args = parser.parse_args()
 
@@ -170,46 +242,72 @@ def main():
     if not 1 <= len(args.titulo) <= 100 or "\n" in args.titulo:
         raise ValueError("El título debe tener de 1 a 100 caracteres y una sola línea.")
 
-    yt = youtube()
+    yt, creds = youtube()
     channel_id = validate_channel(yt, args.modo)
     if args.modo == "identificar":
         print("LISTO: canal autorizado y bloqueado. Aún no se ha subido ningún video.")
         return
 
     with tempfile.TemporaryDirectory(prefix="laboratorio_mental_") as tmp:
-        video = local_copy(Path(tmp), args.video)
+        folder = Path(tmp)
+        video = local_copy(folder, args.video)
+        subs = {lang: local_copy(folder, name, minimum=100)
+                for lang, name in SUB_FILES.items()}
+        thumb = local_copy(folder, DEFAULT_THUMB, minimum=1000)
+        validate_subtitles(subs["es"], subs["en"])
         file_hash = digest(video)
         print("DRIVE OK: " + args.video + " (" + str(video.stat().st_size) +
               " bytes), SHA256=" + file_hash, flush=True)
 
         state, state_sha = gh_request(STATE_FILE)
         key = channel_id + ":" + file_hash
-        if key in state:
-            print("YA PUBLICADO: https://www.youtube.com/watch?v=" + state[key]["youtube_id"])
-            return
         if args.modo == "verificar":
-            print("VERIFICACIÓN OK. No se publicó. Título: " + args.titulo)
+            require_captions_permission(creds)
+            print("VERIFICACION OK. Video, dos SRT, miniatura y permisos listos. "
+                  "No se publico nada.", flush=True)
             return
 
-        existing_id = find_existing(yt, args.titulo)
-        if existing_id:
-            raise RuntimeError(
-                "Ya hay un video con ese título en Laboratorio Mental: "
-                "https://www.youtube.com/watch?v=" + existing_id +
-                ". Se detuvo para evitar duplicados.")
+        # Do not upload if subtitles cannot subsequently be attached.
+        require_captions_permission(creds)
 
-        video_id = upload(yt, video, args.titulo, args.privacidad)
-        state[key] = {
-            "youtube_id": video_id,
-            "channel_id": channel_id,
-            "archivo": args.video,
-            "sha256": file_hash,
-            "titulo": args.titulo,
-            "privacidad_solicitada": args.privacidad,
-        }
-        save_state(STATE_FILE, state, state_sha)
-        print("VIDEO SUBIDO: https://www.youtube.com/watch?v=" + video_id, flush=True)
-        print("Comprueba en YouTube Studio su estado real de privacidad.", flush=True)
+        info = state.get(key)
+        if info:
+            video_id = info["youtube_id"]
+            print("CONTINUANDO VIDEO EXISTENTE: https://www.youtube.com/watch?v=" +
+                  video_id, flush=True)
+        else:
+            existing_id = find_existing(yt, args.titulo)
+            if existing_id:
+                raise RuntimeError("Ya existe un video con ese titulo en este canal: "
+                                   "https://www.youtube.com/watch?v=" + existing_id)
+            video_id = upload(yt, video, args.titulo, args.privacidad)
+            info = {
+                "youtube_id": video_id, "channel_id": channel_id,
+                "archivo": args.video, "sha256": file_hash,
+                "titulo": args.titulo, "privacidad_solicitada": args.privacidad,
+                "miniatura": False, "subtitulos_es": False, "subtitulos_en": False
+            }
+            state[key] = info
+            save_state(STATE_FILE, state, state_sha)
+            print("VIDEO SUBIDO EN PRIVADO: https://www.youtube.com/watch?v=" +
+                  video_id, flush=True)
+
+        # Each operation is idempotent. If one fails, re-running completes missing assets.
+        if not info.get("miniatura"):
+            upload_thumbnail(yt, video_id, thumb)
+            info["miniatura"] = True
+        if not info.get("subtitulos_es"):
+            upload_caption(yt, video_id, "es", subs["es"])
+            info["subtitulos_es"] = True
+        if not info.get("subtitulos_en"):
+            upload_caption(yt, video_id, "en", subs["en"])
+            info["subtitulos_en"] = True
+        # Refresh SHA because initial upload may already have written STATE_FILE.
+        _, latest_sha = gh_request(STATE_FILE)
+        save_state(STATE_FILE, state, latest_sha)
+        print("COMPLETADO: video, miniatura, subtitulos ES y EN. "
+              "https://www.youtube.com/watch?v=" + video_id, flush=True)
+        print("Revisa la visibilidad en YouTube Studio.", flush=True)
 
 
 if __name__ == "__main__":
