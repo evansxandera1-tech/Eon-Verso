@@ -1,0 +1,62 @@
+name: Todo Mal - Verificar conexion YouTube (sin publicar)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/todo_mal_verificar_conexion.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  comprobar:
+    name: Comprobar cuenta OAuth de Todo Mal
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      TODOMAL_YOUTUBE_REFRESH_TOKEN: ${{ secrets.TODOMAL_YOUTUBE_REFRESH_TOKEN }}
+      TODOMAL_YOUTUBE_CLIENT_ID: ${{ secrets.TODOMAL_YOUTUBE_CLIENT_ID || secrets.YOUTUBE_CLIENT_ID }}
+      TODOMAL_YOUTUBE_CLIENT_SECRET: ${{ secrets.TODOMAL_YOUTUBE_CLIENT_SECRET || secrets.YOUTUBE_CLIENT_SECRET }}
+    steps:
+      - name: Instalar dependencias
+        run: pip install --disable-pip-version-check google-auth google-api-python-client
+      - name: Identificar canal vinculado (solo lectura; NO sube videos)
+        shell: python
+        run: |
+          import os
+          import re
+          from google.oauth2.credentials import Credentials
+          from googleapiclient.discovery import build
+
+          def get(name):
+              v = os.environ.get(name, "").strip()
+              if not v:
+                  raise RuntimeError("Falta GitHub Secret: " + name)
+              return v
+
+          creds = Credentials(
+              token=None,
+              refresh_token=get("TODOMAL_YOUTUBE_REFRESH_TOKEN"),
+              client_id=get("TODOMAL_YOUTUBE_CLIENT_ID"),
+              client_secret=get("TODOMAL_YOUTUBE_CLIENT_SECRET"),
+              token_uri="https://oauth2.googleapis.com/token",
+          )
+          youtube = build("youtube", "v3", credentials=creds, cache_discovery=False)
+          response = youtube.channels().list(part="id,snippet", mine=True).execute()
+          channels = response.get("items", [])
+          if len(channels) != 1:
+              raise RuntimeError("Se esperaba exactamente un canal asociado al token; se encontraron " + str(len(channels)))
+          ch = channels[0]
+          title = ch.get("snippet", {}).get("title", "")
+          handle = ch.get("snippet", {}).get("customUrl", "")
+          cid = ch["id"]
+          print("Nombre de canal autorizado: " + title)
+          print("Identificador devuelto: " + handle)
+          print("ID del canal autorizado: " + cid)
+          norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+          if "todomal" not in norm(title) and "todomal" not in norm(handle):
+              raise RuntimeError("CANAL INCORRECTO: no corresponde a Todo Mal. Ningun video fue publicado.")
+          print("CONEXION OK: Todo Mal autenticado correctamente en GitHub Actions.")
+          print("PRUEBA SOLO LECTURA: ningun video fue subido o modificado.")
