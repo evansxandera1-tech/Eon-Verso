@@ -1,0 +1,82 @@
+name: Laboratorio Mental - Hacer publico video existente (una vez)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/laboratorio_mental_hacer_publico_una_vez.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  hacer_publico:
+    name: Cambiar privacidad del video ya subido (sin volver a subir)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LAB_YOUTUBE_CLIENT_ID: ${{ secrets.LAB_YOUTUBE_CLIENT_ID || secrets.YOUTUBE_CLIENT_ID }}
+      LAB_YOUTUBE_CLIENT_SECRET: ${{ secrets.LAB_YOUTUBE_CLIENT_SECRET || secrets.YOUTUBE_CLIENT_SECRET }}
+      LAB_YOUTUBE_REFRESH_TOKEN: ${{ secrets.LAB_YOUTUBE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar API YouTube
+        run: pip install --disable-pip-version-check google-auth google-api-python-client
+      - name: Verificar destino y hacer publico solo el video aprobado
+        shell: python
+        run: |
+          import os
+          from google.oauth2.credentials import Credentials
+          from googleapiclient.discovery import build
+
+          EXPECTED_CHANNEL = "UCiPEtE48jexcmOSzepbUPUg"
+          VIDEO_ID = "tqzYNvIfoF8"
+          EXPECTED_TITLE = "Cómo Dejar las Excusas y Desarrollar Disciplina | Inspirado en Brian Tracy"
+
+          def secret(name):
+              value = os.getenv(name, "").strip()
+              if not value:
+                  raise RuntimeError("Falta secreto: " + name)
+              return value
+
+          credentials = Credentials(
+              token=None,
+              refresh_token=secret("LAB_YOUTUBE_REFRESH_TOKEN"),
+              client_id=secret("LAB_YOUTUBE_CLIENT_ID"),
+              client_secret=secret("LAB_YOUTUBE_CLIENT_SECRET"),
+              token_uri="https://oauth2.googleapis.com/token",
+          )
+          youtube = build("youtube", "v3", credentials=credentials, cache_discovery=False)
+          channels = youtube.channels().list(part="id,snippet", mine=True).execute().get("items", [])
+          if len(channels) != 1 or channels[0]["id"] != EXPECTED_CHANNEL:
+              raise RuntimeError("BLOQUEADO: el token no corresponde a Laboratorio Mental")
+          print("Canal autorizado: " + channels[0]["snippet"]["title"])
+
+          result = youtube.videos().list(part="snippet,status", id=VIDEO_ID).execute().get("items", [])
+          if len(result) != 1:
+              raise RuntimeError("No se encontro el video esperado")
+          video = result[0]
+          if video["snippet"]["channelId"] != EXPECTED_CHANNEL:
+              raise RuntimeError("BLOQUEADO: video pertenece a otro canal")
+          if video["snippet"]["title"] != EXPECTED_TITLE:
+              raise RuntimeError("BLOQUEADO: el titulo del video no coincide con el aprobado")
+
+          previous = video["status"]
+          if previous.get("privacyStatus") == "public":
+              print("YA ES PUBLICO: https://www.youtube.com/watch?v=" + VIDEO_ID)
+          else:
+              if previous.get("privacyStatus") != "private":
+                  raise RuntimeError("BLOQUEADO: se esperaba un video privado")
+              writable = ("embeddable", "license", "publicStatsViewable",
+                          "selfDeclaredMadeForKids", "containsSyntheticMedia")
+              status = {k: previous[k] for k in writable if k in previous}
+              status["privacyStatus"] = "public"
+              youtube.videos().update(
+                  part="status", body={"id": VIDEO_ID, "status": status}
+              ).execute()
+              updated = youtube.videos().list(part="status", id=VIDEO_ID).execute().get("items", [])
+              if len(updated) != 1 or updated[0]["status"]["privacyStatus"] != "public":
+                  raise RuntimeError("No se pudo confirmar que el video es publico")
+              print("PUBLICADO: https://www.youtube.com/watch?v=" + VIDEO_ID)
