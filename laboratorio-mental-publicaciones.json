@@ -6,8 +6,8 @@
     "sha256": "ddd7fcd90091afd8930f169496e41f6df4008aedf4a82739b9110c812d8f9402",
     "titulo": "Cómo Dejar las Excusas y Desarrollar Disciplina | Inspirado en Brian Tracy",
     "privacidad_solicitada": "private",
-    "miniatura": false,
-    "subtitulos_es": false,
-    "subtitulos_en": false
+    "miniatura": true,
+    "subtitulos_es": true,
+    "subtitulos_en": true
   }
 }
