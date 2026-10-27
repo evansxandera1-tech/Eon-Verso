@@ -72,10 +72,6 @@ def youtube():
         client_id=need("LAB_YOUTUBE_CLIENT_ID"),
         client_secret=need("LAB_YOUTUBE_CLIENT_SECRET"),
         token_uri="https://oauth2.googleapis.com/token",
-        scopes=[
-            "https://www.googleapis.com/auth/youtube.readonly",
-            "https://www.googleapis.com/auth/youtube.upload",
-        ],
     )
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
