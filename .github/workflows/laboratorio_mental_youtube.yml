@@ -1,6 +1,10 @@
 name: Laboratorio Mental - YouTube independiente
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'laboratorio_mental/solicitud_publicacion.txt'
   workflow_dispatch:
     inputs:
       modo:
@@ -13,15 +17,15 @@ on:
           - verificar
           - publicar
       video:
-        description: "MP4 en Drive > Laboratorio Mental > Publicar"
+        description: "Video limpio en Drive > Laboratorio Mental > Publicar; SRT ES, EN y miniatura se cargan automaticamente"
         type: string
         required: true
-        default: "EON_Excusas_Subtitulado.mp4"
+        default: "Laboratorio_Mental_Excusas_SIN_SUBS_540p.mp4"
       titulo:
         description: "Título del video en YouTube"
         type: string
         required: true
-        default: "A Nadie Le Importan Tus Excusas | La Disciplina Cambia Tu Vida"
+        default: "Cómo Dejar las Excusas y Desarrollar Disciplina | Inspirado en Brian Tracy"
       privacidad:
         description: "Visibilidad; por seguridad inicialmente privado"
         type: choice
@@ -40,7 +44,7 @@ concurrency:
 
 jobs:
   youtube:
-    name: Verificar canal y publicar solo en Laboratorio Mental
+    name: Verificar canal y adjuntar miniatura y 2 pistas de subtitulos
     runs-on: ubuntu-latest
     timeout-minutes: 80
     env:
@@ -74,10 +78,10 @@ jobs:
       - name: Identificar, verificar o publicar
         shell: bash
         env:
-          MODO: ${{ inputs.modo }}
-          VIDEO: ${{ inputs.video }}
-          TITULO: ${{ inputs.titulo }}
-          PRIVACIDAD: ${{ inputs.privacidad }}
+          MODO: ${{ inputs.modo || 'publicar' }}
+          VIDEO: ${{ inputs.video || 'Laboratorio_Mental_Excusas_SIN_SUBS_540p.mp4' }}
+          TITULO: ${{ inputs.titulo || 'Cómo Dejar las Excusas y Desarrollar Disciplina | Inspirado en Brian Tracy' }}
+          PRIVACIDAD: ${{ inputs.privacidad || 'private' }}
         run: |
           python laboratorio_mental_publicar.py \
             --modo "$MODO" \
