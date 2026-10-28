@@ -1,0 +1,9 @@
+TODO MAL — PUBLICACIÓN AUTORIZADA
+Video: vecino4a_corregido.mp4
+Google Drive: Todo Mal/Publicar/Vecino4A
+Miniatura: miniatura.jpg (HABITACIÓN 4A)
+Subtítulos: es.srt / en.srt
+Título: Las 11 reglas del vecino del 4A | Historia de terror animada
+Privacidad final: public
+Precondiciones: token OAuth del canal Todo Mal, permiso youtube.force-ssl, archivos presentes y SRT sincronizados.
+Subir primero como privado y cambiar a público solo después de miniatura y ambos SRT.
